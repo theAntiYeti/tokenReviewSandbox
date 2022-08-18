@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: token-client
+spec:
+  containers:
+    - name: client
+      image: theantiyeti/token-review-sandbox:latest
+      command: ['/client-main', '-addr=token-review-server.default.svc.cluster.local:50051']
+  serviceAccountName: admin-user

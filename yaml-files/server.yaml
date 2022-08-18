@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: token-server
+  labels:
+    token-review-sandbox: server
+spec:
+  containers:
+    - name: server
+      image: theantiyeti/token-review-sandbox-server:latest
+      ports:
+        - containerPort: 50051
+          name: grpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: token-review-server
+spec:
+  selector:
+    token-review-sandbox: server
+  ports:
+    - protocol: TCP
+      port: 50051
+      targetPort: grpc
