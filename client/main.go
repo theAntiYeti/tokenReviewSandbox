@@ -35,15 +35,14 @@ func main() {
 	}
 	defer conn.Close()
 	c := pb.NewGreeterClient(conn)
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: "a dummy name"})
 	if err != nil {
 		log.Fatalf("could not greet: %v", err)
 	}
-
 	log.Printf("Greeting: %s", r)
+
 	// Sleep long time
 	time.Sleep(1000000 * time.Hour)
 }
@@ -53,7 +52,7 @@ func createAuthenticationToken() (*TokenCredentials, error) {
 	log.Info("Getting service account token")
 	kubernetesToken, err := getKubernetesToken()
 	if err != nil {
-		log.Infof("Error getting service account token: %v", err)
+		return nil, fmt.Errorf("error getting service account token: %v", err)
 	}
 	log.Infof("Service account token: %v", kubernetesToken)
 
@@ -71,7 +70,7 @@ func createAuthenticationToken() (*TokenCredentials, error) {
 	client := &http.Client{Transport: tr}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Infof("Error getting temp token: %v", err)
+		return nil, fmt.Errorf("error getting temp token: %v", err)
 	}
 
 	defer resp.Body.Close()

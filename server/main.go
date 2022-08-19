@@ -21,7 +21,8 @@ import (
 )
 
 var (
-	port = flag.Int("port", 50051, "The server port")
+	port           = flag.Int("port", 50051, "The server port")
+	serviceAccount = flag.String("serviceaccount", "default:admin-user", "Name of the service account used by client")
 )
 
 type server struct {
@@ -86,29 +87,39 @@ func authenticateKubernetesToken(ctx context.Context, req interface{}, info *grp
 	}
 	log.Infof("Returned response %s", body)
 
-	authenticated, err := parseAuthentication(body)
+	status, err := parseAuthentication(body)
 	if err != nil {
 		return nil, err
 	}
-	if !authenticated {
+	if !status.Authenticated {
 		return nil, fmt.Errorf("API response wasn't autenticated")
+	}
+
+	// Check for correct service account (current rule of thumb for authorisation)
+	if status.User.Username != "system:serviceaccount:"+*serviceAccount {
+		return nil, fmt.Errorf("user not authorised, not correct user")
 	}
 
 	return handler(ctx, req)
 }
 
-func parseAuthentication(body []byte) (bool, error) {
+func parseAuthentication(body []byte) (*reviewStatus, error) {
 	var uMbody reviewBody
 	if err := json.Unmarshal(body, &uMbody); err != nil {
-		return false, err
+		return nil, err
 	}
 	log.Infof("Status is: %v", uMbody.Status)
 
-	return uMbody.Status.Authenticated, nil
+	return &uMbody.Status, nil
+}
+
+type reviewUser struct {
+	Username string `json:"username"`
 }
 
 type reviewStatus struct {
-	Authenticated bool `json:"authenticated"`
+	Authenticated bool       `json:"authenticated"`
+	User          reviewUser `json:"user"`
 }
 
 type reviewBody struct {
