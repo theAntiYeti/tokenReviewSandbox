@@ -7,17 +7,16 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/http/httputil"
-
 	grpcAuth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/status"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httputil"
 )
 
 var (
@@ -60,7 +59,13 @@ func authenticateKubernetesToken(ctx context.Context, req interface{}, info *grp
 	}
 
 	// Now we have token we want to do a callback against the API
-	var myUrl = "https://kubernetes.default.svc/apis/authentication.k8s.io/v1/tokenreviews"
+	// Get the URL to call
+	log.Infof("Got to here")
+	url, err := GetClusterUrl(token)
+	if err != nil {
+		return nil, err
+	}
+	var myUrl = url + "/apis/authentication.k8s.io/v1/tokenreviews"
 	var data = fmt.Sprintf("{\"kind\":\"TokenReview\",\"apiVersion\":\"authentication.k8s.io/v1\",\"spec\":{\"token\":\"%s\"}}", token)
 
 	log.Infof("Attempting to call %s", myUrl)

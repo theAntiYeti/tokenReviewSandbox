@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -127,4 +128,11 @@ func (c *TokenCredentials) GetRequestMetadata(context.Context, ...string) (map[s
 
 func (c *TokenCredentials) RequireTransportSecurity() bool {
 	return false
+}
+
+func TrimSuffix(s string, suffix string) string {
+	if strings.HasSuffix(s, suffix) {
+		s = s[:len(s)-len(suffix)]
+	}
+	return s
 }

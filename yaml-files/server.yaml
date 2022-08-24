@@ -11,6 +11,15 @@ spec:
       ports:
         - containerPort: 50051
           name: grpc
+      volumeMounts:
+        - name: kid-mapping
+          mountPath: "/kid-mapping"
+          readOnly: true
+  volumes:
+    - name: kid-mapping
+      configMap:
+        name: kid-mapping
+
 ---
 apiVersion: v1
 kind: Service

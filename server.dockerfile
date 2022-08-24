@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY go.mod ./
 COPY go.sum ./
-COPY server/main.go ./
+COPY server/* ./
 
 RUN go mod download
 
