@@ -7,4 +7,12 @@ spec:
     - name: client
       image: theantiyeti/token-review-sandbox:latest
       command: ['/client-main', '-addr=token-review-server.default.svc.cluster.local:50051']
+  volumes:
+    - name: api-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            path: api-token
+            expirationSeconds: 600
+            audience: data-store
   serviceAccountName: admin-user

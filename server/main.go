@@ -1,22 +1,19 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/tls"
-	"encoding/json"
 	"flag"
 	"fmt"
 	grpcAuth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
-	"google.golang.org/grpc/status"
-	"io"
+	authv1 "k8s.io/api/authentication/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"net"
-	"net/http"
-	"net/http/httputil"
+	"os"
 )
 
 var (
@@ -53,9 +50,15 @@ func main() {
 
 // Unary interceptor for validating token against issuing kubernetes cluster (for this prototype they're the same cluster)
 func authenticateKubernetesToken(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	token, err := grpcAuth.AuthFromMD(ctx, "bearer")
+	token, err := grpcAuth.AuthFromMD(ctx, "kubernetesAuth")
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "missing credentials")
+		return nil, fmt.Errorf("couldn't parse auth header: %v", err)
+	}
+
+	// Pretend this came from a gRPC call :)
+	fromFile, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	if err != nil {
+		return nil, err
 	}
 
 	// Now we have token we want to do a callback against the API
@@ -65,68 +68,36 @@ func authenticateKubernetesToken(ctx context.Context, req interface{}, info *grp
 	if err != nil {
 		return nil, err
 	}
-	var myUrl = url + "/apis/authentication.k8s.io/v1/tokenreviews"
-	var data = fmt.Sprintf("{\"kind\":\"TokenReview\",\"apiVersion\":\"authentication.k8s.io/v1\",\"spec\":{\"token\":\"%s\"}}", token)
 
-	log.Infof("Attempting to call %s", myUrl)
-	verificationRequest, err := http.NewRequest("POST", myUrl, bytes.NewBuffer([]byte(data)))
-	verificationRequest.Header.Add("Authorization", "Bearer "+token)
-	verificationRequest.Header.Add("Content-Type", "application/json; charset=utf-8")
-
-	reqDump, _ := httputil.DumpRequest(verificationRequest, true)
-	log.Infof("Request to be sent: %s", reqDump)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	config := &rest.Config{
+		Host:            url,
+		BearerToken:     token,
+		TLSClientConfig: rest.TLSClientConfig{CAData: fromFile},
 	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(verificationRequest)
+	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	// Token Review Request made to the client's Kubernetes API.
+	tr := authv1.TokenReview{
+		Spec: authv1.TokenReviewSpec{
+			Token: token,
+		},
 	}
-	log.Infof("Returned response %s", body)
 
-	status, err := parseAuthentication(body)
+	result, err := clientset.AuthenticationV1().TokenReviews().Create(ctx, &tr, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
-	if !status.Authenticated {
-		return nil, fmt.Errorf("API response wasn't autenticated")
+	if !result.Status.Authenticated {
+		return nil, fmt.Errorf("user isn't who they say they are")
 	}
 
 	// Check for correct service account (current rule of thumb for authorisation)
-	if status.User.Username != "system:serviceaccount:"+*serviceAccount {
+	if result.Status.User.Username != "system:serviceaccount:"+*serviceAccount {
 		return nil, fmt.Errorf("user not authorised, not correct user")
 	}
 
 	return handler(ctx, req)
-}
-
-func parseAuthentication(body []byte) (*reviewStatus, error) {
-	var uMbody reviewBody
-	if err := json.Unmarshal(body, &uMbody); err != nil {
-		return nil, err
-	}
-	log.Infof("Status is: %v", uMbody.Status)
-
-	return &uMbody.Status, nil
-}
-
-type reviewUser struct {
-	Username string `json:"username"`
-}
-
-type reviewStatus struct {
-	Authenticated bool       `json:"authenticated"`
-	User          reviewUser `json:"user"`
-}
-
-type reviewBody struct {
-	Status reviewStatus `json:"status"`
 }
